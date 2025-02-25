@@ -1,0 +1,37 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: pcnpay
+    restart: always
+    environment:
+      MYSQL_DATABASE: "pcnpay"
+      MYSQL_USER: "satanshu"
+      MYSQL_PASSWORD: "penguinsarecute"
+      MYSQL_ROOT_PASSWORD: "penguinsarecute"
+    ports:
+      - "3306:3306"
+    expose:
+      - "3306"
+    volumes:
+      - mysql-db:/var/lib/mysql
+      - ./ddl:/docker-entrypoint-initdb.d
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin
+    restart: always
+    environment:
+      - PMA_HOST=db
+      - PMA_PORT=3306
+      - PMA_USER=root
+      - PMA_PASSWORD=penguinsarecute
+      - PMA_ARBITRARY=1
+      - UPLOAD_LIMIT=200M
+      - MEMORY_LIMIT=256M
+      - MAX_EXECUTION_TIME=600
+      - MAX_INPUT_TIME=600
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+volumes:
+  mysql-db:
