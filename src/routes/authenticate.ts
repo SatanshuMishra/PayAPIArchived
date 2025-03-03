@@ -26,30 +26,26 @@ async function createEncryptedJWT(
 
 	try {
 		await pool.query(
-			`INSERT INTO jwt (jti, expires_at) VALUES (?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
-			[jti, expirationTime]
+			`INSERT INTO jwt (jti) VALUES (?)`,
+			[jti]
 		);
 	} catch (dbError) {
 		console.error("Database error:", dbError);
 		throw new Error(`Database error: ${dbError.message}`);
 	}
 
-	const encryptionSecret = new TextEncoder().encode(
-		process.env.JWT_ENCRYPTION_KEY
+	// Import the JWK
+	const encryptionKey = await jose.importJWK(
+		JSON.parse(process.env.JWT_ENCRYPTION_KEY || '{}'),
+		'A256GCM' // Specify the algorithm
 	);
 
-	if (encryptionSecret.length !== 32) {
-		console.log(encryptionSecret.length);
-		throw new Error(
-			"JWT_ENCRYPTION_KEY must be exactly 32 bytes (256 bits) for A256GCM"
-		);
-	}
-
+	// Encrypt with the JWK
 	const encryptedJWT = await new jose.CompactEncrypt(
 		new TextEncoder().encode(signedJWT)
 	)
 		.setProtectedHeader({ alg: "dir", enc: "A256GCM" })
-		.encrypt(encryptionSecret);
+		.encrypt(encryptionKey);
 
 	return encryptedJWT;
 }
