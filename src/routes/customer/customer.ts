@@ -7,35 +7,16 @@ import type {
 	CreateCustomerRequest,
 	CreateCustomerResponse,
 } from "@/types/CreateCustomer";
-import verifyJWT from "@/scripts/verifyJWT";
 import "dotenv/config";
 import pool from "@/db";
+import { v4 as uuidv4 } from "uuid";
 
-const customers: FastifyPluginAsync = async (fastify) => {
+const customer: FastifyPluginAsync = async (fastify) => {
 	fastify.post<{ Body: FastifyRequest; Reply: FastifyReply }>(
-		"/customers",
-		async (request: any, reply: any) => {
-			// const requestData: CreateCustomerRequest = {
-			// 	identifier: "customer2@example.com",
-			// 	first_name: "John",
-			// 	last_name: "Doe",
-			// 	active: true
-			// };
+		"/customer",
+		async (request: FastifyRequest, reply: FastifyReply) => {
 			try {
-				const authHeader = request.headers.authorization;
-				if (!authHeader || !authHeader.startsWith("Bearer ")) {
-					return reply
-						.code(401)
-						.send({
-							error: "Missing or invalid authorization token",
-						});
-				}
-
-				// VERY TOKEN
-
-				const token = authHeader.split(" ")[1];
-				const customerID = await verifyJWT(token, "Create Customer");
-
+				const clientContext = request.clientContext;
 				// CHECK IF CUSTOMER EXSITS
 				const [rows] = await pool.query(
 					`SELECT email FROM customer WHERE email = ?;`,
@@ -64,21 +45,34 @@ const customers: FastifyPluginAsync = async (fastify) => {
 					}
 				);
 
-				if (!response.ok) throw new Error(`Error: ${response.status}`);
+				if (!response.ok)
+					throw new Error(`Error: ${response.status}`);
 				const responseData: CreateCustomerResponse =
 					await response.json();
 
-				await pool.query(`INSERT INTO customer (banquestID, email) VALUES (?, ?);`, [responseData.id, responseData.identifier]);
+				await pool.query(
+					`INSERT INTO customer (id, banquest_ID, email) VALUES (UUID_TO_BIN(?), ?, ?);`,
+					[uuidv4(), responseData.id, responseData.identifier]
+				);
 
 				return reply.code(201).send({ status: "Success" });
 			} catch (error: any) {
-				throw new Error(
-					`Failed to process transaction: ${error.message}`,
-					{ cause: error }
-				);
+				if (
+					error.message.includes("Customer with email") &&
+					error.message.includes("already exists")
+				) {
+					return reply.code(409).send({
+						message: error.message,
+					});
+				}
+
+				console.error("Transaction error:", error);
+				return reply.code(500).send({
+					message: `Failed to process transaction: ${error.message}`,
+				});
 			}
 		}
 	);
 };
 
-export default customers;
+export default customer;

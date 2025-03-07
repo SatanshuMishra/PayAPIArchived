@@ -1,32 +1,24 @@
-import { FastifyPluginAsync } from "fastify";
-
-interface PingRequest {
-	timestamp: number;
-	message?: string;
-}
+import { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 
 interface PingResponse {
 	success: boolean;
 	message: string;
-	receivedAt: number;
 	serverTime: number;
 	echo?: string;
 }
 
 const ping: FastifyPluginAsync = async (fastify) => {
-	fastify.post<{
-		Body: PingRequest;
+	fastify.get<{
+		Querystring: Record<string, never>;
+		Params: Record<string, never>;
+		Headers: Record<string, never>;
 		Reply: PingResponse;
-	}>("/ping", async (request) => {
-		const { timestamp, message } = request.body;
-
-		return {
-			success: true,
+	}>("/ping", async (request: FastifyRequest, reply: FastifyReply) => {
+		return reply.code(200).send({
 			message: "Pong!",
-			receivedAt: timestamp,
-			serverTime: Date.now(),
-			echo: message,
-		};
+			serverTime: new Date(),
+			echo: "Hello World, Pong!",
+		});
 	});
 };
 

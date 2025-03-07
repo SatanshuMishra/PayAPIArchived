@@ -1,15 +1,20 @@
 import { FastifyPluginAsync } from "fastify";
-import { v4 as uuid } from "uuid";
 import "dotenv/config";
 import pool from "@/db";
+import { v4 as uuidv4 } from 'uuid';
+import CryptoJS from "crypto-js";
 
 async function createEncryptedJWT(
-	customerID: string,
 	command: string,
-	expirationTime: number
+	actor: string,
+	clientContext: {
+		ip: string;
+		fingerprint: string;
+	},
+	expirationTime?: number
 ) {
 	const jose = await import("jose");
-	const jti = uuid();
+	const jti = uuidv4();
 
 	const signingSecret = new TextEncoder().encode(process.env.JWT_SECRET);
 	const alg = "HS256";
@@ -17,6 +22,7 @@ async function createEncryptedJWT(
 	const signedJWT = await new jose.SignJWT({
 		customerID,
 		command,
+		actor
 	})
 		.setProtectedHeader({ alg })
 		.setIssuedAt()
@@ -26,7 +32,7 @@ async function createEncryptedJWT(
 
 	try {
 		await pool.query(
-			`INSERT INTO jwt (jti) VALUES (?)`,
+			`INSERT INTO jwt (jti) VALUES (UUID_TO_BIN(?))`,
 			[jti]
 		);
 	} catch (dbError) {
@@ -34,18 +40,37 @@ async function createEncryptedJWT(
 		throw new Error(`Database error: ${dbError.message}`);
 	}
 
-	// Import the JWK
 	const encryptionKey = await jose.importJWK(
 		JSON.parse(process.env.JWT_ENCRYPTION_KEY || '{}'),
-		'A256GCM' // Specify the algorithm
+		'A256GCM'
 	);
 
-	// Encrypt with the JWK
 	const encryptedJWT = await new jose.CompactEncrypt(
 		new TextEncoder().encode(signedJWT)
 	)
 		.setProtectedHeader({ alg: "dir", enc: "A256GCM" })
 		.encrypt(encryptionKey);
+
+	const logID = uuidv4();
+
+	await pool.query(`INSERT INTO jwt_log_events (id, event_type, success, reason, ip, browser_fingerprint, actor_id) VALUES (UUID_TO_BIN(?), ?, ?, ?, INET6_ATON(?), ?, UUID_TO_BIN(?))`, [
+		logID,
+		0,
+		1,
+		"LOG WAS GENERATED SUCCESSFULLY. AUTO-GENERATED.",
+		clientContext.ip,
+		clientContext.fingerprint,
+		actor
+	]);
+
+	await pool.query(
+		`INSERT INTO jwt_log_details (log_id, jti, command, customer_email) VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), ?, ?)`, [
+		logID,
+		jti,
+		0, // DYNAMICALLY FETCH THIS
+		customerID.replace(/([a-zA-Z])[^@]*([a-zA-Z])(@.+)/, '$1*****$2$3')
+	]
+	)
 
 	return encryptedJWT;
 }
@@ -53,6 +78,7 @@ async function createEncryptedJWT(
 interface AuthenticateRequest {
 	command: string;
 	customerID: string;
+	actor: string;
 	expirationTime?: number; // WILL BE SET TO 5m BY DEFAULT.
 }
 
@@ -64,6 +90,7 @@ interface AuthenticateResponse {
 interface ErrorResponse {
 	error: string;
 }
+
 
 const authenticate: FastifyPluginAsync = async (fastify) => {
 	fastify.post<{
@@ -93,6 +120,12 @@ const authenticate: FastifyPluginAsync = async (fastify) => {
 							jwt: { type: "string" },
 						},
 					},
+					400: {
+						type: "object",
+						properties: {
+							error: { type: "string" },
+						}
+					},
 					500: {
 						type: "object",
 						properties: {
@@ -107,15 +140,49 @@ const authenticate: FastifyPluginAsync = async (fastify) => {
 				const {
 					customerID,
 					command,
+					actor,
 					expirationTime = 5,
 				} = request.body;
+
+				const ip = request.ip || request.connection.remoteAddress;
+
+				const userAgent = request.headers['user-agent'] || '';
+				const acceptLanguage = request.headers['accept-language'] || '';
+				const acceptEncoding = request.headers['accept-encoding'] || '';
+
+				const fingerprint = CryptoJS.SHA256(`${userAgent}${acceptLanguage}${acceptEncoding}`).toString(CryptoJS.enc.Hex);
+
+				const clientContext = {
+					ip,
+					fingerprint
+				};
+
+				const logID = uuidv4();
+
+
+				// CHECK ALL REQUIRED VALUES ARE PRESENT
+				if (!customerID || !command || !actor) {
+					await pool.query(`INSERT INTO jwt_log_events (id, event_type, success, reason, ip, browser_fingerprint, actor_id) VALUES (UUID_TO_BIN(?), ?, ?, ?, INET6_ATON(?), ?, UUID_TO_BIN(?))`, [
+						logID,
+						0,
+						0,
+						"MISSING REQUIRED PARAMETERS",
+						clientContext.ip,
+						clientContext.fingerprint,
+						actor
+					]);
+					return reply.code(400).send({
+						error: "MISSING REQUIRED PARAMETERS",
+					} as ErrorResponse);
+				}
 
 				const encryptedJWT = await createEncryptedJWT(
 					customerID,
 					command,
+					actor,
+					clientContext,
 					expirationTime
 				);
-				console.log("Encrypted JWT (sign-then-encrypt):", encryptedJWT);
 
 				return { success: true, jwt: encryptedJWT };
 			} catch (error) {
