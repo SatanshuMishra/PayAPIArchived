@@ -23,3 +23,4 @@ const ping: FastifyPluginAsync = async (fastify) => {
 };
 
 export default ping;
+

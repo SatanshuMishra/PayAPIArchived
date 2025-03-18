@@ -1,6 +1,6 @@
 import "dotenv/config";
 import pool from "@/db";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 
 export default async function verifyJWT(
 	token: string,
@@ -9,17 +9,11 @@ export default async function verifyJWT(
 		ip: string;
 		fingerprint: string;
 	}
-): Promise<string> {
-
-	console.log(`ENTERED VERIFY JWT SCRIPT`);
+): Promise<boolean> {
 	const jose = await import("jose");
-
-	// WILL BE USED TO GENERATE LOG AND IT'S DETAILS
 	const logID = uuidv4();
-
 	let jti = null;
 	let command = null;
-
 	try {
 		await pool.query(
 			`INSERT INTO jwt_log_events (
@@ -27,31 +21,17 @@ export default async function verifyJWT(
       ) VALUES (
         UUID_TO_BIN(?), ?, ?, INET6_ATON(?), ?, NULL
       )`,
-			[
-				logID,
-				0,
-				0,
-				clientContext.ip,
-				clientContext.fingerprint,
-			]
+			[logID, 0, 0, clientContext.ip, clientContext.fingerprint]
 		);
-
-		// DECRYPT TOKEN
 		const decryptionKey = await jose.importJWK(
 			JSON.parse(process.env.JWT_ENCRYPTION_KEY || "{}")
 		);
-
 		const { plaintext } = await jose.compactDecrypt(token, decryptionKey);
 		const jwt = new TextDecoder().decode(plaintext);
-
-		console.log(`JWT: `, jwt);
-
-		// VALIDATE JWT SIGNATURE
 		const {
 			payload,
 		}: {
 			payload: {
-				customerID: string;
 				command: string;
 				jti: string;
 			};
@@ -59,7 +39,6 @@ export default async function verifyJWT(
 			jwt,
 			new TextEncoder().encode(process.env.JWT_SECRET)
 		);
-
 		await pool.query(
 			`INSERT INTO jwt_log_details (
         log_id, jti, command, customer_email
@@ -70,18 +49,13 @@ export default async function verifyJWT(
 				logID,
 				payload.jti,
 				0,
-				payload.customerID.replace(/([a-zA-Z])[^@]*([a-zA-Z])(@.+)/, '$1*****$2$3')
 			]
 		);
-
-		// CHECK JTI EXISTS IN DB. IF IT DOES, REMOVE IT.
 		const [deleteResult] = await pool.query(
 			`DELETE FROM jwt WHERE jti = UUID_TO_BIN(?)`,
 			[payload.jti]
 		);
-
 		const jtiExisted = deleteResult.affectedRows > 0;
-
 		if (!jtiExisted) {
 			await pool.query(
 				`UPDATE jwt_log_events SET reason = ? WHERE id = UUID_TO_BIN(?)`,
@@ -90,25 +64,24 @@ export default async function verifyJWT(
 
 			throw new Error("Unauthorized Access Detected! jti doesn't exist!");
 		}
-
 		jti = payload.jti;
 		command = parseInt(payload.command);
-
 		if (command !== action) {
 			await pool.query(
 				`UPDATE jwt_log_events SET reason = ? WHERE id = UUID_TO_BIN(?)`,
 				["Unauthorized Access: Action didn't match", logID]
 			);
 
-			throw new Error("Unauthorized Access Detected! Action didn't match!");
+			throw new Error(
+				"Unauthorized Access Detected! Action didn't match!"
+			);
 		}
-
 		await pool.query(
 			`UPDATE jwt_log_events SET success = 1, reason = ? WHERE id = UUID_TO_BIN(?)`,
 			["JWT verified successfully", logID]
 		);
 
-		return payload.customerID;
+		return true;
 	} catch (error: any) {
 		console.error("JWT Verification Error Details:", {
 			message: error.message,
@@ -116,7 +89,6 @@ export default async function verifyJWT(
 			name: error.name,
 			code: error.code,
 		});
-
 		try {
 			await pool.query(
 				`UPDATE jwt_log_events SET reason = ? WHERE id = UUID_TO_BIN(?) AND reason IS NULL`,

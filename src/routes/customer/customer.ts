@@ -17,6 +17,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
 		async (request: FastifyRequest, reply: FastifyReply) => {
 			try {
 				const clientContext = request.clientContext;
+
 				// CHECK IF CUSTOMER EXSITS
 				const [rows] = await pool.query(
 					`SELECT email FROM customer WHERE email = ?;`,

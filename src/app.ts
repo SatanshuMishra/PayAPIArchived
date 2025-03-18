@@ -7,7 +7,7 @@ const app = fastify({
 }).withTypeProvider();
 
 app.addHook('onRequest', async (request, reply) => {
-	const skipAuthPaths = ['/auth/tokens', '/ping'];
+	const skipAuthPaths = ['/auth/tokens', '/auth/keys', '/ping'];
 	if (skipAuthPaths.some(path => request.url.startsWith(path))) {
 		return;
 	}
@@ -68,11 +68,11 @@ app.addHook('onRequest', async (request, reply) => {
 });
 
 //@ts-ignore
-app.register(import('./routes/ping.js'));
+app.register(import('./routes/ping/index.js'));
 //@ts-ignore
-app.register(import('./routes/transactions.js'));
+app.register(import('./routes/auth/tokens.js'));
 //@ts-ignore
-app.register(import('./routes/auth/createToken.js'));
+app.register(import('./routes/auth/keys.js'));
 //@ts-ignore
 app.register(import('./routes/customer/customer.js'));
 //@ts-ignore

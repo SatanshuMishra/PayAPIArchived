@@ -1,12 +1,10 @@
 import { FastifyPluginAsync } from "fastify";
 import "dotenv/config";
 import { GatewayError } from "@/errors";
-import pool from "@/db";
-import { v4 as uuidv4 } from "uuid";
-import CryptoJS from "crypto-js";
+import createJWT from "@/services/auth/createJWT";
 
 interface AuthenticateRequest {
-	command: string;
+	command: number;
 	actor: string;
 	expirationTime?: number; // WILL BE SET TO 5m BY DEFAULT.
 }
@@ -29,7 +27,7 @@ const createToken: FastifyPluginAsync = async (fastify) => {
 				body: {
 					type: "object",
 					properties: {
-						command: { type: "string" },
+						command: { type: "number" },
 						actor: { type: "string" },
 						expirationTime: {
 							type: "number",
@@ -59,52 +57,28 @@ const createToken: FastifyPluginAsync = async (fastify) => {
 		},
 		async (request, reply) => {
 			try {
+				const apiKey: string | undefined =
+					request.headers.authorization;
 				const { command, actor, expirationTime = 5 } = request.body;
 
-				if (!command || !actor) {
-					const error = new GatewayError(`Missing required parameters. Both 'command' and 'actor' must be provided.`);
+				if (!apiKey || !command || !actor) {
+					const error = new GatewayError(
+						`Missing required parameters. Both 'command' and 'actor' must be provided.`
+					);
 					error.statusCode = 400;
 					throw error;
 				}
 
-				const jose = await import("jose");
-				const jti = uuidv4();
-
-				const signingSecret = new TextEncoder().encode(
-					process.env.JWT_SECRET
-				);
-
-				const signedJWT = await new jose.SignJWT({
+				const encryptedJWT = await createJWT(
+					apiKey,
 					command,
 					actor,
-				})
-					.setProtectedHeader({ alg: "HS256" })
-					.setIssuedAt()
-					.setExpirationTime(`${expirationTime}m`)
-					.setJti(jti)
-					.sign(signingSecret);
-
-				await pool.query(
-					`INSERT INTO jwt (jti) VALUES (UUID_TO_BIN(?))`,
-					[jti]
+					expirationTime
 				);
-
-				const encryptionKey = await jose.importJWK(
-					JSON.parse(process.env.JWT_ENCRYPTION_KEY || '{}'),
-					'A256GCM'
-				);
-
-				const encryptedJWT = await new jose.CompactEncrypt(
-					new TextEncoder().encode(signedJWT)
-				)
-					.setProtectedHeader({ alg: "dir", enc: "A256GCM" })
-					.encrypt(encryptionKey);
-
 				return reply.code(201).send({
 					message: "JWT was successfully created.",
-					encryptedJWT
+					encryptedJWT,
 				});
-
 			} catch (err) {
 				if (err instanceof GatewayError) {
 					throw err;
