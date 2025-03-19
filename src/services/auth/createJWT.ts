@@ -2,10 +2,17 @@ import "dotenv/config";
 import { GatewayError } from "@/errors";
 import pool from "@/db";
 import { v4 as uuidv4 } from "uuid";
+import { verifyApiKey } from "@/scripts/apiKey";
+import getBearerToken from "@/scripts/getBearerToken";
 
-export default async function createJWT(apiKey: string, command: number, actor: string, expirationTime = 5) {
+export default async function createJWT(
+	apiKeyHeader: string,
+	command: number,
+	actor: string,
+	expirationTime = 5
+) {
 	try {
-
+		const apiKey = getBearerToken(apiKeyHeader);
 		if (!apiKey || !command || !actor) {
 			const error = new GatewayError(
 				`Missing required parameters. 'apiKey', 'command' and 'actor' must be provided.`
@@ -14,12 +21,20 @@ export default async function createJWT(apiKey: string, command: number, actor: 
 			throw error;
 		}
 
+		const isApiKeyValid = await verifyApiKey(apiKey, command);
+
+		if (!isApiKeyValid) {
+			const error = new GatewayError(
+				`API Key doesn't have sufficient permissions to process this request.`
+			);
+			error.statusCode = 401;
+			throw error;
+		}
+
 		const jose = await import("jose");
 		const jti = uuidv4();
 
-		const signingSecret = new TextEncoder().encode(
-			process.env.JWT_SECRET
-		);
+		const signingSecret = new TextEncoder().encode(process.env.JWT_SECRET);
 
 		const signedJWT = await new jose.SignJWT({
 			apiKey,
@@ -32,10 +47,9 @@ export default async function createJWT(apiKey: string, command: number, actor: 
 			.setJti(jti)
 			.sign(signingSecret);
 
-		await pool.query(
-			`INSERT INTO jwt (jti) VALUES (UUID_TO_BIN(?))`,
-			[jti]
-		);
+		await pool.query(`INSERT INTO jwt (jti) VALUES (UUID_TO_BIN(?))`, [
+			jti,
+		]);
 
 		const encryptionKey = await jose.importJWK(
 			JSON.parse(process.env.JWT_ENCRYPTION_KEY || "{}"),
@@ -59,4 +73,3 @@ export default async function createJWT(apiKey: string, command: number, actor: 
 		throw error;
 	}
 }
-

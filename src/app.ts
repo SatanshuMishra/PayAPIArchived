@@ -7,7 +7,7 @@ const app = fastify({
 }).withTypeProvider();
 
 app.addHook('onRequest', async (request, reply) => {
-	const skipAuthPaths = ['/auth/tokens', '/auth/keys', '/ping'];
+	const skipAuthPaths = ['/auth/tokens', '/auth/keys'];
 	if (skipAuthPaths.some(path => request.url.startsWith(path))) {
 		return;
 	}
@@ -42,21 +42,17 @@ app.addHook('onRequest', async (request, reply) => {
 			});
 		}
 
-		const actionMap = {
-			'/transactions': 0,
-			'/customers': 1,
-			'/payment-methods': 2
+		const requestDetails: {
+			path: string;
+			method: string;
+		} = {
+			path: request.url,
+			method: request.method
 		};
 
-		let action = 0;
-		for (const [path, actionId] of Object.entries(actionMap)) {
-			if (request.url.startsWith(path)) {
-				action = actionId;
-				break;
-			}
-		}
+		console.log(requestDetails);
 
-		await verifyJWT(token, action, clientContext);
+		await verifyJWT(token, requestDetails, clientContext);
 		request.clientContext = clientContext;
 	} catch (error: any) {
 		console.error("Authentication error:", error.message);

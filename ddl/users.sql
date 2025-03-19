@@ -10,32 +10,38 @@ CREATE TABLE role (
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE permission (
-  permission_id INT PRIMARY KEY,
-  code VARCHAR(64) NOT NULL UNIQUE,  
+  permission_id INT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(255) NOT NULL,  
   category VARCHAR(32) NOT NULL,     
-  action VARCHAR(32) NOT NULL,       
+  method VARCHAR(32) NOT NULL,       
+  endpoint_path VARCHAR(255) NOT NULL,
   description VARCHAR(255),
+  UNIQUE KEY endpoint (category, method, endpoint_path),
+  UNIQUE KEY code (category, code),
   KEY idx_code (code),
-  KEY idx_category_action (category, action)
+  KEY idx_category_method (category, method)
 ) ENGINE = InnoDB;
 
-INSERT INTO permission (permission_id, code, category, action, description) 
-VALUES (1, 'CARD_GET_CUSTOMER', 'CARD', 'GET', 'Get Card assigned to Customer');
+INSERT INTO permission (code, category, method, endpoint_path, description) 
+VALUES ('AUTH_TOKEN_CREATE', 'AUTH', 'POST', '/auth/tokens', 'Create a new JWT');
 
-INSERT INTO permission (permission_id, code, category, action, description) 
-VALUES (2, 'CUSTOMER_CREATE', 'CUSTOMER', 'CREATE', 'Create new Customer');
+INSERT INTO permission (code, category, method, endpoint_path, description) 
+VALUES ('PING_PONG', 'PING', 'GET', '/ping', 'Ping the server. See if anything comes back.');
 
-INSERT INTO permission (permission_id, code, category, action, description) 
-VALUES (3, 'PAYMENT_METHOD_CREATE', 'PAYMENT', 'CREATE', 'Create New payment method');
+INSERT INTO permission (code, category, method, endpoint_path, description) 
+VALUES ('CARD_GET_CUSTOMER', 'CUSTOMERS', 'GET', '/customers/payment-method', 'Get a card assigned to Customer');
 
-INSERT INTO permission (permission_id, code, category, action, description) 
-VALUES (4, 'CARD_VERIFY', 'CARD', 'GET', 'Check if Card exists');
+INSERT INTO permission (code, category, method, endpoint_path, description) 
+VALUES ('CUSTOMER_CREATE', 'CUSTOMERS', 'POST', '/customers', 'Create new Customer');
 
-INSERT INTO permission (permission_id, code, category, action, description) 
-VALUES (5, 'TRANSACTION_CREATE', 'TRANSACTION', 'CREATE', 'Create new Transaction');
+INSERT INTO permission (code, category, method, endpoint_path, description) 
+VALUES ('CARD_CREATE', 'PAYMENTMETHODS', 'POST', '/paymentmethods/card' 'Create new card');
 
-INSERT INTO permission (permission_id, code, category, action, description) 
-VALUES (6, 'AUTH_TOKEN_CREATE', 'AUTH', 'CREATE', 'CREATE new JWT');
+INSERT INTO permission (code, category, method, endpoint_path, description) 
+VALUES ('CARD_VERIFY', 'PAYMENTMETHODS', 'GET', '/paymentmethods/card', 'Check if Card exists');
+
+INSERT INTO permission (code, category, method, endpoint_path, description) 
+VALUES ('TRANSACTION_CREATE', 'TRANSACTION', 'POST', '/transactions', 'Create new Transaction');
 
 CREATE TABLE role_permission (
     role_id INT NOT NULL,
@@ -94,3 +100,4 @@ CREATE TABLE api_key (
 ) ENGINE = InnoDB 
   ROW_FORMAT = COMPRESSED
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+

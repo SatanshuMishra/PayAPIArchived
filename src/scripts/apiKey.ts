@@ -50,20 +50,29 @@ export async function generateApiKey(
 
 export async function verifyApiKey(
 	providedKey: string,
-	action: number
+	command: number
 ): Promise<boolean> {
 	const keyHash = createHash("sha256").update(providedKey).digest("hex");
 
+	console.log(`Key Hash: ${keyHash}\n Command: ${command}`)
+
 	const [rows] = await pool.query(
-		`SELECT EXISTS(
-										SELECT 1 FROM api_key
-										WHERE key_hash = ${keyHash} 
-										AND expires_at < NOW()
-									) AS key_exists;`,
-		[]
+		`
+SELECT EXISTS (
+SELECT 1
+FROM api_key ak 
+JOIN role_permission rp 
+ON ak.role_id = rp.role_id 
+WHERE ak.key_hash = ? 
+AND rp.permission_id = ?
+  ) as is_key_valid;
+										`,
+		[keyHash, command]
 	);
 
-	if (!rows[0].key_exists) {
+	console.log(rows[0].is_key_valid, rows[0].is_key_valid ? "True" : "false");
+
+	if (!rows[0].is_key_valid) {
 		const error = new GatewayError(
 			`API Key doesn't exists or has expired.`
 		);
