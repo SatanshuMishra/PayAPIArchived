@@ -64,6 +64,8 @@ export default async function verifyJWT(
 			`DELETE FROM jwt WHERE jti = UUID_TO_BIN(?)`,
 			[payload.jti]
 		);
+
+		//@ts-ignore
 		const jtiExisted = deleteResult.affectedRows > 0;
 		if (!jtiExisted) {
 			// await pool.query(
