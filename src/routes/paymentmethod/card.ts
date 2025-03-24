@@ -14,6 +14,7 @@ import {
 import { GatewayError } from "@/errors";
 import validateAndFormatUUID from "@/scripts/validateAndFormatUUID";
 import { v4 as uuidv4 } from "uuid";
+import { RegisterCardRoute } from "@/types/routes/paymentmethod/card";
 
 interface RequestParams {
 	customerID: string;
@@ -54,7 +55,7 @@ async function getCardByDetails(
 	);
 
 	//@ts-ignore
-	const exists = cardResult[0].count > 0;
+	const exists = cardResult.length > 0;
 
 	if (!exists) {
 		return {
@@ -72,8 +73,8 @@ async function getCardByDetails(
 
 async function getBanquestID(customerID: string): Promise<string> {
 	// @ts-ignore
-	const [rows] = pool.query(
-		`SELECT banquest_ID FROM customer WHERE customerID = UUID_TO_BIN(?);`,
+	const [rows] = await pool.query(
+		`SELECT banquest_ID FROM customer WHERE customer_ID = UUID_TO_BIN(?);`,
 		[customerID]
 	);
 
@@ -106,56 +107,7 @@ const card: FastifyPluginAsync = async (fastify) => {
 	fastify.post<{ Body: RequestParams; Reply: CardResponse }>(
 		`/payment-methods/card`,
 		{
-			schema: {
-				body: {
-					type: "object",
-					properties: {
-						customerID: { type: "string" }, // CUSTOMER UUID
-						cardNumber: { type: "string" },
-						expMonth: { type: "number" },
-						expYear: { type: "number" },
-						avsPostalCode: { type: "string" },
-					},
-					required: [
-						"customerID",
-						"cardNumber",
-						"expMonth",
-						"expYear",
-						"avsPostalCode",
-					],
-				},
-				response: {
-					200: {
-						type: "object",
-						properties: {
-							banquest_ID: { type: "string" },
-						},
-					},
-					400: {
-						type: "object",
-						properties: {
-							error: { type: "string" },
-							message: { type: "string" },
-						},
-					},
-					409: {
-						type: "object",
-						properties: {
-							error: { type: "string" },
-							message: { type: "string" },
-							banquest_ID: { type: "string" },
-						},
-					},
-					500: {
-						type: "object",
-						properties: {
-							error: { type: "string" },
-							message: { type: "string" },
-							cause: { type: "string" },
-						},
-					},
-				},
-			},
+			schema: RegisterCardRoute
 		},
 		async (
 			request: FastifyRequest<{ Body: RequestParams }>,
@@ -163,25 +115,11 @@ const card: FastifyPluginAsync = async (fastify) => {
 		) => {
 			try {
 				const {
-					customerID,
 					cardNumber,
 					expMonth,
 					expYear,
 					avsPostalCode,
 				} = request.body;
-
-				const {
-					valid: customerIDValid,
-					formattedUUID: formattedCustomerID,
-				} = validateAndFormatUUID(customerID);
-
-				if (!customerIDValid) {
-					const error = new GatewayError(
-						"The customer ID provided is invalid. The endpoint only accepts UUID values."
-					);
-					error.statusCode = 400;
-					throw error;
-				}
 
 				try {
 					cardNumberSchema.parse(cardNumber);
@@ -223,12 +161,10 @@ const card: FastifyPluginAsync = async (fastify) => {
 					throw gatewayError;
 				}
 
-				const { currentMonth, currentYear } = {
-					currentMonth: new Date().getMonth(),
-					currentYear: new Date().getFullYear()
-				}
+				const currentMonth = new Date().getMonth() + 1; // JavaScript months are 0-indexed
+				const currentYear = new Date().getFullYear();
 
-				if (expMonth < currentMonth || expYear < currentYear) {
+				if (expYear < currentYear || (expYear === currentYear && expMonth < currentMonth)) {
 					const gatewayError = new GatewayError(
 						"Unable to save card. Card you are trying to save is expired."
 					);
@@ -253,32 +189,35 @@ const card: FastifyPluginAsync = async (fastify) => {
 				}
 
 				const [rows] = await pool.query(
-					`SELECT banquest_ID FROM customer WHERE customerID = UUID_TO_BIN(?)`,
+					`SELECT banquest_ID FROM customer WHERE customer_ID = UUID_TO_BIN(?)`,
 					[formattedCustomerID]
 				);
 
 				//@ts-ignore
 				if (rows.length === 0) {
 					const error = new GatewayError(
-						"Failed to reterive ID. No customer with provided credentials exists."
+						"Failed to retrieve ID. No customer with provided credentials exists."
 					);
 					error.statusCode = 404;
 					throw error;
 				}
 
+				// @ts-ignore
+				const banquestCustomerId = rows[0].banquest_ID;
+
 				const response = await fetch(
-					`${process.env.BANQUEST_API_URL_SANDBOX}/customsers/${rows[0].banquest_ID}/payment-methods`,
+					`${process.env.BANQUEST_API_URL_SANDBOX}/customers/${banquestCustomerId}/payment-methods`,
 					{
 						method: "POST",
 						headers: {
 							"Content-Type": "application/json",
-							Authorization: `Basic ${btoa(`${process.env.BANQUEST_API_KEY_SANDBOX}:${process.env.BANQUEST_API_PIN_SANDBOX}`)}`,
-							body: JSON.stringify({
-								card: cardNumber,
-								expiry_month: expMonth,
-								expiry_year: expYear,
-							}),
+							Authorization: `Basic ${btoa(`${process.env.BANQUEST_API_KEY_SANDBOX}:${process.env.BANQUEST_API_PIN_SANDBOX}`)}`
 						},
+						body: JSON.stringify({
+							card: cardNumber,
+							expiry_month: expMonth,
+							expiry_year: expYear,
+						}),
 					}
 				);
 
@@ -291,10 +230,18 @@ const card: FastifyPluginAsync = async (fastify) => {
 				} = await response.json();
 
 				const paymentCardID = uuidv4();
-				/* await insertCard(cardNumber, expMonth, expYear, avsPostalCode, banquest_ID); */
 				await pool.query(
-					`INSERT INTO payment_card (id, banquest_payment_ID, customer_ID, last_four_digits, avs_postal_code, exp_month, exp_year, card_type) VALUES (UUID_TO_BIN(?) ,UUID_TO_BIN(?), UUID_TO_BIN(?), ?, ?, ?, ?, ?`,
-					[paymentCardID, banques]
+					`INSERT INTO payment_card (id, banquest_payment_ID, customer_ID, last_four_digits, avs_postal_code, exp_month, exp_year, card_type) VALUES (UUID_TO_BIN(?), ?, UUID_TO_BIN(?), ?, ?, ?, ?, ?)`,
+					[
+						paymentCardID,
+						responseData.cardRef,
+						formattedCustomerID,
+						cardNumber.slice(-4),
+						avsPostalCode,
+						expMonth,
+						expYear,
+						determineCardType(cardNumber)
+					]
 				);
 
 				return reply.code(200).send({

@@ -1,3 +1,4 @@
+import { PingRoute } from "@/types/routes/developer/ping";
 import { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 
 interface PingResponse {
@@ -13,7 +14,9 @@ const ping: FastifyPluginAsync = async (fastify) => {
 		Params: Record<string, never>;
 		Headers: Record<string, never>;
 		Reply: PingResponse;
-	}>("/ping", async (request: FastifyRequest, reply: FastifyReply) => {
+	}>("/developer/ping", {
+		schema: PingRoute
+	}, async (request: FastifyRequest, reply: FastifyReply) => {
 		return reply.code(200).send({
 			message: "Pong!",
 			serverTime: new Date(),
