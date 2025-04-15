@@ -1,8 +1,6 @@
 CREATE TABLE jwt (
-	jti VARCHAR(64) PRIMARY KEY NOT NULL,
-	expires_at TIMESTAMP,
-	INDEX idx_jti (jti),
-	INDEX idx_expires_at (expires_at)
+	jti BINARY(16) PRIMARY KEY NOT NULL,
+	INDEX idx_jti (jti)
 ) ENGINE = InnoDB 
   ROW_FORMAT = COMPRESSED
   CHARACTER SET utf8mb4

@@ -9,7 +9,7 @@ services:
       MYSQL_PASSWORD: "penguinsarecute"
       MYSQL_ROOT_PASSWORD: "penguinsarecute"
     ports:
-      - "3306:3306"
+      - "3307:3306"
     expose:
       - "3306"
     volumes:
@@ -30,7 +30,7 @@ services:
       - MAX_EXECUTION_TIME=600
       - MAX_INPUT_TIME=600
     ports:
-      - "8080:80"
+      - "8081:80"
     depends_on:
       - db
 volumes:
