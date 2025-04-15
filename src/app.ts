@@ -17,27 +17,39 @@ const app = fastify({
 app.register(fastifySwagger, {
 	swagger: {
 		info: {
-			title: 'Payment API Documentation',
-			description: 'API for managing payment methods and processing payments',
-			version: '1.0.0'
+			title: "Payment API Documentation",
+			description:
+				"API for managing payment methods and processing payments",
+			version: "1.0.0",
 		},
 		tags: [
-			{ name: 'payment-methods', description: 'Payment method management' },
-			{ name: 'developer', description: 'Routes used by developers for testing and debugging' }
+			{
+				name: "payment-methods",
+				description: "Payment method management",
+			},
+			{
+				name: "developer",
+				description:
+					"Routes used by developers for testing and debugging",
+			},
+			{
+				name: "customer",
+				description: "Endpoints to handle customer specific actions",
+			},
 		],
 		securityDefinitions: {
 			bearerAuth: {
-				type: 'apiKey',
-				name: 'Authorization',
-				in: 'header'
-			}
-		}
-	}
+				type: "jwt",
+				name: "Authorization",
+				in: "header",
+			},
+		},
+	},
 });
 
 // Register Swagger UI plugin
 app.register(fastifySwaggerUi, {
-	routePrefix: '/documentation'
+	routePrefix: "/documentation",
 });
 
 app.addHook("onRequest", async (request, reply) => {

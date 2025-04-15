@@ -10,19 +10,32 @@ export default async function saveCard(
 	avs_zip: string,
 	card_type: string
 ): Promise<{
-	status: string;
+	status: number;
 	message: string;
 	payment_ID: string;
 	token: string;
 }> {
 	try {
+		const existingCard = await pool.query(
+			`SELECT BIN_TO_UUID(id) as id FROM payment_card WHERE last_4 = ? AND expiry_month = ? AND expiry_year = ? AND card_type = ?`,
+			[card.slice(-4), expiry_month, expiry_year, card_type]
+		);
+
+		if (existingCard[0] && existingCard[0].length > 0) {
+			const error = new GatewayError(
+				`Card already exists in our system.`
+			);
+			error.statusCode = 409;
+			throw error;
+		}
+
 		const bqResponse = await fetch(
 			`${process.env.BANQUEST_API_URL_SANDBOX}/saved-cards`,
 			{
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					Authorization: `Basic ${btoa(`${process.env.BANQUEST_API_KEY_SANDBOX}:${process.env.BANQUEST_API_PIN_SANDBOX}`)}`
+					Authorization: `Basic ${btoa(`${process.env.BANQUEST_API_KEY_SANDBOX}:${process.env.BANQUEST_API_PIN_SANDBOX}`)}`,
 				},
 				body: JSON.stringify({
 					card,
@@ -60,7 +73,7 @@ export default async function saveCard(
 		);
 
 		return {
-			status: "Sucess",
+			status: 201,
 			message: "Card was successfully added.",
 			payment_ID,
 			token: bqResponseData.cardRef,
@@ -68,6 +81,14 @@ export default async function saveCard(
 	} catch (err: any) {
 		if (err instanceof GatewayError) {
 			throw err;
+		}
+
+		if (err.code === "ECONNREFUSED" || err.code === "ETIMEDOUT") {
+			const error = new GatewayError(
+				`Payment gateway is currently unavailable.`
+			);
+			error.statusCode = 503;
+			throw error;
 		}
 
 		const error = new GatewayError(`Internal Server Error`);

@@ -7,21 +7,19 @@ export default async function getCardWithDetails(
 	expiry_month: number,
 	expiry_year: number,
 	avs_zip: string,
-	card_type: string
 ): Promise<{
-	status: string;
+	status: number;
 	message: string;
-	id: string;
+	payment_ID: string;
 }> {
 	try {
 		const [rows] = await pool.query(
-			`SELECT id FROM payment_card WHERE last4 = ? AND avs_zip = ? AND expiry_month = ? AND expiry_month = ? AND expiry_year = ? AND card_type = ?;`,
+			`SELECT id FROM payment_card WHERE last4 = ? AND avs_zip = ? AND expiry_month = ? AND expiry_month = ? AND expiry_year = ?;`,
 			[
 				last4,
 				avs_zip,
 				expiry_month,
-				expiry_year,
-				card_type,
+				expiry_year
 			]
 		);
 
@@ -40,10 +38,10 @@ export default async function getCardWithDetails(
 		}
 
 		return {
-			status: "Sucess",
+			status: 200,
 			message: "Card was found.",
 			//@ts-ignore
-			id: rows[0].id,
+			payment_ID: rows[0].id,
 		};
 
 	} catch (err: any) {

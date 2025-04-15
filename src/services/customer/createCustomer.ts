@@ -6,7 +6,7 @@ import { v4 as uuidV4 } from 'uuid';
 export default async function createCustomer(
 	identifier: string
 ): Promise<{
-	status: string;
+	status: number;
 	message: string;
 	customer_ID: string;
 }> {
@@ -27,7 +27,7 @@ export default async function createCustomer(
 
 		if (!bqResponse.ok) {
 			const error = new GatewayError(
-				`Failed to save card. External Server Error.`
+				`Failed to save customer. External Server Error.`
 			);
 			error.statusCode = 500;
 			throw error;
@@ -38,11 +38,11 @@ export default async function createCustomer(
 
 		const customer_ID = uuidV4();
 		await pool.query(
-			`INSERT INTO customer (customer_ID, payment_ID, banquest_payment_ID) VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), ?)`,
+			`INSERT INTO customer (id, banquest_customer_ID, email) VALUES (UUID_TO_BIN(?), ?, ?)`,
 			[customer_ID, bqResponseData.id, identifier]
 		);
 		return {
-			status: "Sucess",
+			status: 201,
 			message: "Customer was successfully created.",
 			customer_ID
 		};

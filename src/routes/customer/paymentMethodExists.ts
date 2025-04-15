@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from "uuid";
 import CryptoJS from "crypto-js";
 import { GatewayError } from "@/errors";
 
-import validateAndFormatUUID from "@/scripts/validateAndFormatUUID";
+import { checkUUID } from "@/scripts/validateAndFormatUUID";
 
 interface RouteParams {
 	customerID: string;
@@ -26,12 +26,12 @@ const paymentMethodExists: FastifyPluginAsync = async (fastify) => {
 				const {
 					valid: customerIDValid,
 					formattedUUID: formattedCustomerID,
-				} = validateAndFormatUUID(customerID);
+				} = checkUUID(customerID);
 
 				const {
 					valid: paymentIDValid,
 					formattedUUID: formattedPaymentID,
-				} = validateAndFormatUUID(paymentID);
+				} = checkUUID(paymentID);
 
 				if (!customerIDValid) {
 					const error = new GatewayError(

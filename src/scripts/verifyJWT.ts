@@ -78,13 +78,21 @@ export default async function verifyJWT(
 		jti = payload.jti;
 		command = payload.command;
 
+		let path = requestDetails.path;
+
+		if (requestDetails.method == "GET") {
+			path = path.split("?")[0];
+			path = path.endsWith("/") ? path.slice(0, -1) : path;
+			console.log(`Formatted Path: ${path}`);
+		}
+
 		// STEP 4: VERIFY ENDPOINT EXISTS & JWT IS FOR REQUESTED ENDPOINT
 		const [rows] = await pool.query(
 			`SELECT permission_id AS endpoint_id 
 			FROM permission 
 			WHERE method = ? 
 			AND endpoint_path = ?`,
-			[requestDetails.method, requestDetails.path]
+			[requestDetails.method, path]
 		);
 
 		//@ts-ignore
